@@ -1,0 +1,28 @@
+{
+  "name": "toggl.com-convert",
+  "version": "0.0.1",
+  "main": "index.ts",
+  "author": "Robert Wettstädt",
+  "license": "MIT",
+  "scripts": {
+    "start": "cross-env ts-node index.ts",
+    "watch": "nodemon"
+  },
+  "devDependencies": {
+    "@types/isomorphic-fetch": "^0.0.35",
+    "@types/node": "^13.9.2",
+    "dotenv": "^8.2.0",
+    "nodemon": "^2.0.2",
+    "ts-node": "^8.7.0",
+    "typescript": "^3.8.3"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all",
+    "printWidth": 120,
+    "semi": false
+  },
+  "dependencies": {
+    "isomorphic-fetch": "^2.2.1"
+  }
+}
