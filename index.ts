@@ -10,6 +10,17 @@ if (process.env.API_TOKEN == null) {
 }
 
 const { MS_TO_MIN_FACTOR, ROUNDING_INTERVAL, PROJECT_ID, START_DATE, END_DATE } = process.env
+
+if (
+  PROJECT_ID == null ||
+  MS_TO_MIN_FACTOR == null ||
+  ROUNDING_INTERVAL == null ||
+  START_DATE == null ||
+  END_DATE == null
+) {
+  throw new Error('env not configured correctly')
+}
+
 const PROJECT_ID_NUM = parseInt(PROJECT_ID, 10)
 const MS_TO_MIN_FACTOR_NUM = parseInt(MS_TO_MIN_FACTOR, 10)
 const ROUNDING_INTERVAL_NUM = parseInt(ROUNDING_INTERVAL, 10)
