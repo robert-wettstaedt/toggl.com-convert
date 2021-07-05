@@ -23,6 +23,7 @@
     "semi": false
   },
   "dependencies": {
+    "cross-env": "^7.0.2",
     "isomorphic-fetch": "^3.0.0"
   }
 }
