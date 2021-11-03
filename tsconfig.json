@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "lib": ["esnext"],
+    "module": "commonjs",
+    "sourceMap": true,
+    "strictFunctionTypes": true,
+    "target": "es2016"
+  },
+  "exclude": ["node_modules", "**/node_modules/*"]
+}

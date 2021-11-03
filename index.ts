@@ -9,10 +9,10 @@ if (process.env.API_TOKEN == null) {
   throw new TypeError('API_TOKEN missing from env')
 }
 
-const { MS_TO_MIN_FACTOR, ROUNDING_INTERVAL, PROJECT_ID, START_DATE, END_DATE } = process.env
+const { MS_TO_MIN_FACTOR, ROUNDING_INTERVAL, PROJECT_IDS, START_DATE, END_DATE } = process.env
 
 if (
-  PROJECT_ID == null ||
+  PROJECT_IDS == null ||
   MS_TO_MIN_FACTOR == null ||
   ROUNDING_INTERVAL == null ||
   START_DATE == null ||
@@ -21,7 +21,7 @@ if (
   throw new Error('env not configured correctly')
 }
 
-const PROJECT_ID_NUM = parseInt(PROJECT_ID, 10)
+const PROJECT_IDS_ARR = PROJECT_IDS.split(',').map((id) => parseInt(id, 10))
 const MS_TO_MIN_FACTOR_NUM = parseInt(MS_TO_MIN_FACTOR, 10)
 const ROUNDING_INTERVAL_NUM = parseInt(ROUNDING_INTERVAL, 10)
 
@@ -33,17 +33,19 @@ const fn = async () => {
   const endString = endDate.toISOString()
 
   const filePath = './dist/'
-  const fileName = `${START_DATE}_${END_DATE}_${PROJECT_ID_NUM}.csv`
+  const fileName = `${START_DATE}_${END_DATE}.csv`
 
   try {
-    const project = await getProject(PROJECT_ID_NUM)
+    const projectPromises = PROJECT_IDS_ARR.map((projectId) => getProject(projectId))
+    const projects = await Promise.all(projectPromises)
     const timeEntries = await getTimeEntries(startString, endString)
     const dateTimeMap = getDateTimeMap(timeEntries)
-    const workTimeEntries = getWorkTimeEntries(dateTimeMap)
-    const csvContent = getCsvContent(workTimeEntries, project)
+    const workTimeEntries = getWorkTimeEntries(dateTimeMap, projects)
+    const projectSums = getProjectSums(workTimeEntries)
+    const csvContent = getCsvContent(workTimeEntries, projectSums)
     await saveCsv(csvContent, filePath, fileName)
 
-    console.log(`Your csv file was succesfully saved to ${path.join(filePath, fileName)}`)
+    console.log(`Your csv file was successfully saved to ${path.join(filePath, fileName)}`)
   } catch (error) {
     console.error(error)
   }
@@ -53,7 +55,7 @@ fn()
 
 const getDateTimeMap = (timeEntries: TimeEntry[]) => {
   return timeEntries.reduce((dateTimeMap, timeEntry) => {
-    if (timeEntry.pid === PROJECT_ID_NUM) {
+    if (PROJECT_IDS_ARR.includes(timeEntry.pid)) {
       const startDate = new Date(timeEntry.start)
       const stopDate = new Date(timeEntry.stop)
 
@@ -61,59 +63,89 @@ const getDateTimeMap = (timeEntries: TimeEntry[]) => {
 
       const startDay = startDate.getDate()
 
-      const dayEntries = dateTimeMap[startDay] ?? []
-      dateTimeMap[startDay] = [...dayEntries, dateTimeEntry]
+      const dayEntries = dateTimeMap[startDay] ?? {}
+      const projectEntries = dayEntries[timeEntry.pid] ?? []
+      dateTimeMap[startDay] = { ...dayEntries, [timeEntry.pid]: [...projectEntries, dateTimeEntry] }
     }
 
     return dateTimeMap
   }, {} as DateTimeMap)
 }
 
-const getWorkTimeEntries = (dateTimeMap: DateTimeMap) => {
+const getWorkTimeEntries = (dateTimeMap: DateTimeMap, projects: Project[]): WorkTimeEntry[] => {
   // const entries: DateTimeEntry[][] = [Object.values(dateTimeMap)[0]]
-  const entries: DateTimeEntry[][] = Object.values(dateTimeMap)
+  const entries: Record<number, DateTimeEntry[]>[] = Object.values(dateTimeMap)
 
-  const workTimeEntries = entries.reduce((workTimeEntries, dateTimeEntries) => {
-    const startDate = roundDate(dateTimeEntries[0].startDate)
-    const stopDate = roundDate(dateTimeEntries[dateTimeEntries.length - 1].stopDate)
+  const workTimeEntries = entries.flatMap((projectEntries) => {
+    const entries = Object.entries(projectEntries)
 
-    const breakSumMinutes = dateTimeEntries.slice(1).reduce((sum, dateTimeEntry, index) => {
-      const prev = dateTimeEntries[index]
-      const breakTime = dateTimeEntry.startDate.getTime() - prev.stopDate.getTime()
+    return entries.reduce((workTimeEntries, [projectId, dateTimeEntries]) => {
+      const startDate = roundDate(dateTimeEntries[0].startDate)
+      const stopDate = roundDate(dateTimeEntries[dateTimeEntries.length - 1].stopDate)
 
-      return sum + breakTime / MS_TO_MIN_FACTOR_NUM
-    }, 0)
+      const breakSumMinutes = dateTimeEntries.slice(1).reduce((sum, dateTimeEntry, index) => {
+        const prev = dateTimeEntries[index]
+        const breakTime = dateTimeEntry.startDate.getTime() - prev.stopDate.getTime()
 
-    const roundedBreakSumMinutes = roundMinutes(breakSumMinutes)
-    const workSumMinutes = (stopDate.getTime() - startDate.getTime()) / MS_TO_MIN_FACTOR_NUM - roundedBreakSumMinutes
+        return sum + breakTime / MS_TO_MIN_FACTOR_NUM
+      }, 0)
 
-    return [
-      ...workTimeEntries,
-      {
-        breakTime: timeConvert(roundedBreakSumMinutes),
-        date: `${startDate.getDate()}.${startDate.getMonth() + 1}.${startDate.getFullYear()}`,
-        startHours: startDate.getHours(),
-        startMinutes: startDate.getMinutes(),
-        stopHours: stopDate.getHours(),
-        stopMinutes: stopDate.getMinutes(),
-        workTime: timeConvert(workSumMinutes),
-      } as WorkTimeEntry,
-    ]
-  }, [] as WorkTimeEntry[])
+      const roundedBreakSumMinutes = roundMinutes(breakSumMinutes)
+      const workSumMinutes = (stopDate.getTime() - startDate.getTime()) / MS_TO_MIN_FACTOR_NUM - roundedBreakSumMinutes
+
+      return [
+        ...workTimeEntries,
+        {
+          breakTime: timeConvert(roundedBreakSumMinutes),
+          date: `${startDate.getDate()}.${startDate.getMonth() + 1}.${startDate.getFullYear()}`,
+          project: projects.find((project) => String(project.id) === projectId),
+          startHours: startDate.getHours(),
+          startMinutes: startDate.getMinutes(),
+          stopHours: stopDate.getHours(),
+          stopMinutes: stopDate.getMinutes(),
+          workTime: timeConvert(workSumMinutes),
+        } as WorkTimeEntry,
+      ]
+    }, [] as WorkTimeEntry[])
+  })
 
   return workTimeEntries
 }
 
-const getCsvContent = (workTimeEntries: WorkTimeEntry[], project: Project) => {
-  const header = 'date;startHours;startMinutes;stopHours;stopMinutes;breakTime;totalWorkTime;gleitzeit;project\n'
+const getProjectSums = (workTimeEntries: WorkTimeEntry[]): Record<string, string> => {
+  const numberMap = workTimeEntries.reduce((map, entry) => {
+    const prevSum = map[entry.project.id] ?? 0
+    const nextSum = prevSum + parseFloat(entry.workTime.replace(',', '.'))
+
+    return { ...map, [entry.project.id]: nextSum }
+  }, {} as Record<string, number>)
+
+  const stringMap = Object.entries(numberMap).reduce((map, [projectId, entry]) => {
+    return { ...map, [projectId]: entry.toString().replace('.', ',') }
+  }, {} as Record<string, string>)
+
+  return stringMap
+}
+
+const getCsvContent = (workTimeEntries: WorkTimeEntry[], projectSums: Record<string, string>) => {
+  const header = 'date;startHours;startMinutes;stopHours;stopMinutes;breakTime;totalWorkTime;gleitzeit;project'
+
   const body = workTimeEntries
-    .map(
-      (workTimeEntry) =>
-        `${workTimeEntry.date};${workTimeEntry.startHours};${workTimeEntry.startMinutes};${workTimeEntry.stopHours};${workTimeEntry.stopMinutes};${workTimeEntry.breakTime};;;${project.name}`,
-    )
+    .map((workTimeEntry) => {
+      const projectName = process.env[workTimeEntry.project.id] ?? workTimeEntry.project.name
+
+      return `${workTimeEntry.date};${workTimeEntry.startHours};${workTimeEntry.startMinutes};${workTimeEntry.stopHours};${workTimeEntry.stopMinutes};${workTimeEntry.breakTime};;;${projectName}`
+    })
     .join('\n')
 
-  return header + body
+  const footer = Object.entries(projectSums)
+    .map(([projectId, sum]) => {
+      const projectName = process.env[projectId]
+      return `${sum}h ${projectName}`
+    })
+    .join('\n')
+
+  return [header, body, '\n', footer].join('\n')
 }
 
 const roundDate = (date: Date) => {

@@ -3,7 +3,7 @@ import { TimeEntry, Project } from './types'
 
 const auth = Buffer.from(`${process.env.API_TOKEN}:api_token`).toString('base64')
 
-export const getProject = async (projectId: number) => {
+export const getProject = async (projectId: number): Promise<Project> => {
   const res = await fetch(`${process.env.API_URL}projects/${projectId}`, {
     method: 'GET',
     headers: { Authorization: `Basic ${auth}` },
@@ -18,7 +18,7 @@ export const getProject = async (projectId: number) => {
   return project
 }
 
-export const getTimeEntries = async (start: string, end: string) => {
+export const getTimeEntries = async (start: string, end: string): Promise<TimeEntry[]> => {
   const res = await fetch(`${process.env.API_URL}time_entries?start_date=${start}&end_date=${end}`, {
     method: 'GET',
     headers: { Authorization: `Basic ${auth}` },

@@ -8,6 +8,7 @@ export interface TimeEntry {
   pid: number
   start: string
   stop: string
+  tags?: string[]
   uid: number
   wid: number
 }
@@ -35,12 +36,15 @@ export interface DateTimeEntry extends TimeEntry {
 }
 
 export interface DateTimeMap {
-  [day: number]: DateTimeEntry[]
+  [day: number]: {
+    [pid: number]: DateTimeEntry[]
+  }
 }
 
 export interface WorkTimeEntry {
   breakTime: string
   date: string
+  project?: Project
   startHours: number
   startMinutes: number
   stopHours: number
